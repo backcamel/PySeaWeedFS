@@ -19,10 +19,20 @@ import tornado.web
 import tornado.gen
 from tornado.web import HTTPError
 
-from src.handlers.streamer.post_streamer import PostDataStreamer
+from streamer.post_streamer import PostDataStreamer
 from base import BaseHandler
+from sqlitefs.fs_sqlite import WeedFSDB, create_tables
 
 logger = logging.getLogger('littlefs.' + __name__)
+
+
+def db_init(db_path):
+    """
+    数据库初始化
+    :param db_path:
+    :return:
+    """
+    pass
 
 
 # noinspection PyAbstractClass,PyAttributeOutsideInit

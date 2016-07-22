@@ -28,8 +28,9 @@ define("config", default=None, help="tornado config file")
 define("debug", default=False, help="debug mode")
 tornado.options.parse_command_line()
 
-MEDIA_ROOT = get_path(ROOT, 'media/fs_dir')
+MEDIA_ROOT = get_path(ROOT, 'media')
 TEMPLATE_ROOT = get_path(ROOT, 'templates')
+DATA_ROOT = get_path(ROOT, 'sqlite')
 
 
 # Deployment Configuration 部署配置
@@ -40,8 +41,9 @@ settings['static_path'] = MEDIA_ROOT
 settings['cookie_secret'] = "your-cookie-secret"
 settings['xsrf_cookies'] = False
 settings['template_loader'] = tornado.template.Loader(TEMPLATE_ROOT)
-settings['fs_dir'] = MEDIA_ROOT
 settings['buf_size'] = 4096
+settings['sqlite'] = DATA_ROOT
+settings['db'] = "weedfs.db"
 
 
 # log 配置

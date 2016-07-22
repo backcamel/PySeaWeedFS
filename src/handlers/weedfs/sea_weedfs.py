@@ -47,16 +47,23 @@ class SeaWeedFS(object):
         except Exception as error:
             return None, error
 
-    def get_volume(self):
+    def get_volume_info(self, volume_id):
         """
         下载文件前先获取volume信息
+        http://localhost:9333/dir/lookup?volumeId=3
         :return:
         """
-        pass
+        get_volume_url = "http://{master}/dir/lookup?volumeId={volume_id}".format(master=self.master_info,
+                                                                                  volume_id=volume_id)
+        try:
+            r = requests.get(get_volume_url, timeout=2)
+            return json.loads(r.text).get("locations", None), None
+        except Exception as error:
+            return None, error
 
     def put_file(self, volume_info, fid, file_path):
         """
-        put 上传文件
+        文件上传模块
         :param volume_info:
         :param fid:
         :param file_path:
@@ -64,19 +71,33 @@ class SeaWeedFS(object):
         """
         put_url = "http://{volume}/{fid}".format(volume=volume_info, fid=fid)
         try:
-            with open(file_path, 'rb') as fp:
-                files = {'file': fp}
-                r = requests.post(put_url, files=files)
-                file_size = json.loads(r).get('size', 0)
-                if file_path != 0:
-                    return 0, file_size
-                else:
-                    return 1, "file size is 0"
+            files = {'file': open(file_path, 'rb')}
+            r = json.loads(requests.post(put_url, files=files).text)
+            error = r.get('error', None)
+            if error:
+                return False, error
+            else:
+                return True, r
         except Exception as error:
-            return 1, error
+            return False, error
 
-    def upload_file(self):
-        pass
+    def upload_file(self, volume_info, file_path):
+        """
+        上传文件
+        :param volume_info:
+        :param file_path:
+        :return:
+        """
+        fid_stat, fid_info = self.get_fid()
+        if fid_stat:
+            upload_stat, upload_info = self.put_file(volume_info, fid_stat, file_path)
+            if upload_stat:
+                upload_info['fid'] = fid_stat
+                return 0, upload_info
+            else:
+                return 1, upload_info
+        else:
+            return 2, fid_info
 
     def download_file(self):
         pass
@@ -87,4 +108,4 @@ class SeaWeedFS(object):
 
 if __name__ == '__main__':
     fs = SeaWeedFS('192.168.14.185:9333')
-    print fs.get_fid()
+    print fs.upload_file("192.168.14.185:8080", "/Users/wangyazhe/Downloads/zh-google-styleguide-master.zip")
