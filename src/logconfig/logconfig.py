@@ -40,13 +40,13 @@ def initialize_logging():
             #    'class': 'logging.NullHandler',
             # },
             'console': {
-                'level': 'DEBUG',
+                'level': 'ERROR',
                 'class': 'logging.StreamHandler',
                 'formatter': 'verbose',
                 'stream': 'ext://sys.stdout'
             },
             'file': {
-                'level': 'DEBUG',
+                'level': 'ERROR',
                 'class': 'logging.handlers.RotatingFileHandler',
                 # 当达到10MB时分割日志
                 'maxBytes': 1024 * 1024 * 10,
@@ -55,7 +55,7 @@ def initialize_logging():
                 # If delay is true,
                 # then file opening is deferred until the first call to emit().
                 'delay': True,
-                'filename': 'little_fs.log',
+                'filename': 'weedfs.log',
                 'formatter': 'verbose'
             }
         },
