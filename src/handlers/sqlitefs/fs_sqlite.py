@@ -6,6 +6,11 @@
 @contact: w4n9@sina.com
 @create: 16/7/22
 hail hydra!
+主要功能
+1.判断文件在数据库中是否存在
+2.插入数据
+3.更新数据
+4.删除数据
 """
 
 __author__ = "mango"
@@ -19,9 +24,7 @@ from settings import settings
 
 
 sqlite_db = SqliteDatabase("{root_path}/{db}".format(root_path=settings['sqlite'], db=settings['db']),
-                           pragmas=(
-                               ('cache_size', 10000),
-                               ('mmap_size', 1024 * 1024 * 32)))
+                           threadlocals=True)
 
 
 class BaseModel(peewee.Model):
@@ -31,28 +34,40 @@ class BaseModel(peewee.Model):
 
 
 class weedfs_info(BaseModel):
-    name = peewee.CharField(max_length=255)
+    name = peewee.CharField(max_length=255, unique=True)
     size = peewee.IntegerField()
     fid = peewee.CharField(max_length=16)
 
     class Meta:
         primary_key = CompositeKey('name', 'fid')
-        indexes = ((('fid', 'name'), True), )
+        indexes = ((('name', 'fid'), True), )
 
 
+# noinspection PyBroadException
 def create_tables():    # 建表
-    sqlite_db.connect()
-    sqlite_db.create_tables([weedfs_info])
-    sqlite_db.close()
+    try:
+        sqlite_db.connect()
+        sqlite_db.create_tables([weedfs_info])
+        sqlite_db.close()
+    except:
+        return False
+    return True
 
 
-# noinspection PyMethodMayBeStatic
+# noinspection PyMethodMayBeStatic,PyBroadException
 class WeedFSDB(object):
     def __init__(self):
-        pass
+        self.connect()
 
     def connect(self):
-        pass
+        try:
+            if sqlite_db.is_closed():
+                sqlite_db.connect()
+            else:
+                pass
+        except:
+            return False
+        return True
 
     def close(self):
         try:
@@ -76,7 +91,31 @@ class WeedFSDB(object):
         except Exception as error:
             return False, str(error)
         finally:
-            pass
+            self.close()
+
+    def weed_update(self, update_dict, file_name):
+        try:
+            uq = (weedfs_info
+                  .update(**update_dict)
+                  .where(weedfs_info.name == file_name))
+            uq.execute()
+            return True, None
+        except Exception as error:
+            return False, str(error)
+        finally:
+            self.close()
+
+    def weed_delete(self, file_name):
+        try:
+            d = (weedfs_info
+                 .delete()
+                 .where(weedfs_info.name == file_name))
+            d.execute()
+            return True, None
+        except Exception as error:
+            return False, str(error)
+        finally:
+            self.close()
 
     def weed_file_exist(self, file_name):
         """
@@ -98,7 +137,7 @@ class WeedFSDB(object):
         except Exception as error:
             return 2, str(error)
         finally:
-            pass
+            self.close()
 
 
 if __name__ == '__main__':

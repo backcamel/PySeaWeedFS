@@ -29,6 +29,7 @@ define("debug", default=False, help="debug mode")
 tornado.options.parse_command_line()
 
 MEDIA_ROOT = get_path(ROOT, 'media')
+TMP_ROOT = get_path(ROOT, 'media/fs_dir')
 TEMPLATE_ROOT = get_path(ROOT, 'templates')
 DATA_ROOT = get_path(ROOT, 'sqlite')
 
@@ -44,6 +45,11 @@ settings['template_loader'] = tornado.template.Loader(TEMPLATE_ROOT)
 settings['buf_size'] = 4096
 settings['sqlite'] = DATA_ROOT
 settings['db'] = "weedfs.db"
+settings['weed_master'] = "192.168.14.185:9333"
+settings['weed_volume'] = ["192.168.14.185:8080"]
+settings['tmp_dir'] = TMP_ROOT
+
+
 
 
 # log 配置

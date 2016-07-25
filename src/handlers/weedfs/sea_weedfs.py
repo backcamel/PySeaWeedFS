@@ -6,14 +6,15 @@
 @contact: w4n9@sina.com
 @create: 16/7/21
 hail hydra!
-Upload File
+主要功能
+1.上传文件
 > curl -X POST http://localhost:9333/dir/assign
 {"count":1,"fid":"3,01637037d6","url":"127.0.0.1:8080","publicUrl":"localhost:8080"}
 > curl -X PUT -F file=@/home/chris/myphoto.jpg http://127.0.0.1:8080/3,01637037d6
 {"size": 43234}
-Delete
+2.删除文件
 > curl -X DELETE http://127.0.0.1:8080/3,01637037d6
-Download File
+3.下载文件
 > curl http://localhost:9333/dir/lookup?volumeId=3
 {"locations":[{"publicUrl":"localhost:8080","url":"localhost:8080"}]}
 http://localhost:8080/3/01637037d6/my_preferred_name.jpg
@@ -31,6 +32,7 @@ import json
 import requests
 
 
+# noinspection PyMethodMayBeStatic
 class SeaWeedFS(object):
     def __init__(self, master_info):
         self.master_info = master_info
@@ -57,9 +59,14 @@ class SeaWeedFS(object):
                                                                                   volume_id=volume_id)
         try:
             r = requests.get(get_volume_url, timeout=2)
-            return json.loads(r.text).get("locations", None), None
+            r = json.loads(r.text)
+            error = r.get('error', None)
+            if error:
+                return False, error
+            else:
+                return True, r.get('locations', None)
         except Exception as error:
-            return None, error
+            return False, error
 
     def put_file(self, volume_info, fid, file_path):
         """
@@ -99,13 +106,55 @@ class SeaWeedFS(object):
         else:
             return 2, fid_info
 
-    def download_file(self):
-        pass
+    def download_file(self, fid, file_name):
+        """
+        获取下载链接
+        :param fid:
+        :param file_name:
+        :return:
+        """
+        volume_id, file_id = fid.split(',')
+        volume_stat, volume_info = self.get_volume_info(volume_id)
+        if volume_stat:
+            if volume_info:
+                for i in volume_info:
+                    public_url = i.get('publicUrl', None)
+                    if public_url:
+                        download_url = "http://{public}/{volume_id}/{file_id}/{file_name}".format(public=public_url,
+                                                                                                  volume_id=volume_id,
+                                                                                                  file_id=file_id,
+                                                                                                  file_name=file_name)
+                        return True, download_url
+                return False, 'not download url'
+            else:
+                return False, 'volume info none'
+        else:
+            return False, volume_info
 
-    def delete_file(self):
-        pass
+    def delete_file(self, fid):
+        volume_id, file_id = fid.split(',')
+        volume_stat, volume_info = self.get_volume_info(volume_id)
+        if volume_stat:
+            if volume_info:
+                for i in volume_info:
+                    public_url = i.get('publicUrl', None)
+                    if public_url:
+                        delete_url = "http://{public}/{fid}".format(public=public_url, fid=fid)
+                        r = json.loads(requests.delete(delete_url, timeout=2).text)
+                        error = r.get('error', None)
+                        size = r.get('size', None)
+                        if error:
+                            return False, error
+                        else:
+                            return True, None
+                return False, 'not download url'
+            else:
+                return False, 'volume info none'
+        else:
+            return False, volume_info
 
 
 if __name__ == '__main__':
     fs = SeaWeedFS('192.168.14.185:9333')
-    print fs.upload_file("192.168.14.185:8080", "/Users/wangyazhe/Downloads/zh-google-styleguide-master.zip")
+    #print fs.upload_file("192.168.14.185:8080", "/Users/wangyazhe/Downloads/zh-google-styleguide-master.zip")
+    print fs.download_file('3,1ab9e41676', 'zh-google-styleguide-master.zip')

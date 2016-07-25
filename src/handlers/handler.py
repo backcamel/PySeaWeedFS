@@ -21,18 +21,10 @@ from tornado.web import HTTPError
 
 from streamer.post_streamer import PostDataStreamer
 from base import BaseHandler
-from sqlitefs.fs_sqlite import WeedFSDB, create_tables
+from sqlitefs.fs_sqlite import WeedFSDB
+from weedfs.sea_weedfs import SeaWeedFS
 
-logger = logging.getLogger('littlefs.' + __name__)
-
-
-def db_init(db_path):
-    """
-    数据库初始化
-    :param db_path:
-    :return:
-    """
-    pass
+logger = logging.getLogger('weedfs.' + __name__)
 
 
 # noinspection PyAbstractClass,PyAttributeOutsideInit
@@ -40,12 +32,16 @@ def db_init(db_path):
 class UploadHandler(BaseHandler):
     def initialize(self):
         self.set_header('Content-type', 'application/json')
-        self.upload_dir = self.settings.get('fs_dir')
-        if not os.path.exists(self.upload_dir):
-            os.mkdir(self.upload_dir)
+        self.db_client = WeedFSDB()
+        self.weed_master = self.settings.get('weed_master')
+        self.fs_client = SeaWeedFS(self.weed_master)
+        self.weed_volume_list = self.settings.get('weed_volume')
+        self.volume_flag_min = 0
+        self.volume_flag_max = len(self.weed_volume_list) - 1
         self.file_tmp_path = None
         self.res_status = dict()
         self.file_info = dict()
+        self.upload_dir = self.settings.get('tmp_dir')
 
     @tornado.gen.coroutine
     def prepare(self):
@@ -67,6 +63,48 @@ class UploadHandler(BaseHandler):
         :return:
         """
         self.ps.receive(chunk)
+
+    def upload_file(self, file_path, file_name):
+        exist_stat, exist_res = self.db_client.weed_file_exist(file_name)
+        if exist_stat == 0:    # 存在
+            delete_stat, delete_res = self.fs_client.delete_file(exist_res.get('fid'))
+            if delete_stat:
+                upload_stat, upload_res = self.fs_client.upload_file(self.weed_volume_list[self.volume_flag_min],
+                                                                     file_path)
+                if upload_stat == 0:
+                    if isinstance(upload_res, dict):
+                        upload_res['name'] = file_name
+                    db_update_stat, db_update_res = self.db_client.weed_update(upload_res, file_name)
+                    if db_update_stat:
+                        if self.volume_flag_min < self.volume_flag_max:
+                            self.volume_flag_min += 1
+                        elif self.volume_flag_min == self.volume_flag_max:
+                            self.volume_flag_min = 0
+                        return True, None
+                    else:
+                        return False, db_update_res
+                else:
+                    return False, upload_res
+            else:
+                return False, delete_res
+        elif exist_stat == 1:    # 不存在
+            upload_stat, upload_res = self.fs_client.upload_file(self.weed_volume_list[self.volume_flag_min], file_path)
+            if upload_stat == 0:
+                if isinstance(upload_res, dict):
+                    upload_res['name'] = file_name
+                db_insert_stat, db_insert_res = self.db_client.weed_insert(upload_res)
+                if db_insert_stat:
+                    if self.volume_flag_min < self.volume_flag_max:
+                        self.volume_flag_min += 1
+                    elif self.volume_flag_min == self.volume_flag_max:
+                        self.volume_flag_min = 0
+                    return True, None
+                else:
+                    return False, db_insert_res
+            else:
+                return False, upload_res
+        else:
+            return False, exist_res
 
     @tornado.gen.coroutine
     @tornado.web.asynchronous
@@ -91,40 +129,50 @@ class UploadHandler(BaseHandler):
                             self.file_info['file_name'] = file_name
                         else:
                             self.file_info['file_name'] = params.get("filename", "")
-            self.res_status['status'], self.res_status['result'] = 0, self.file_info['file_name']
+            upload_stat, upload_res = self.upload_file(self.file_tmp_path, self.file_info['file_name'])
+            if upload_stat:
+                self.res_status['status'], self.res_status['result'] = 0, self.file_info['file_name']
+            else:
+                self.res_status['status'], self.res_status['result'] = 1, upload_res
         except Exception as error:
             logging.error(str(error))
-            self.res_status['status'], self.res_status['result'] = 1, str(error)
+            self.res_status['status'], self.res_status['result'] = 2, str(error)
         finally:
             self.file_info.clear()
-            # self.ps.release_parts()    # 删除处理
+            self.ps.release_parts()    # 删除处理
             self.write(json.dumps(self.res_status))
             self.finish()
 
 
-# noinspection PyAbstractClass
+# noinspection PyAbstractClass,PyAttributeOutsideInit
 class DownloadHandler(BaseHandler):
     def initialize(self):
         self.set_header('Content-Type', 'application/octet-stream')
+        self.db_client = WeedFSDB()
+        self.weed_master = self.settings.get('weed_master')
+        self.fs_client = SeaWeedFS(self.weed_master)
 
     @tornado.gen.coroutine
     @tornado.web.asynchronous
     def get(self, file_name):
         try:
-            self.set_header('Content-Disposition', 'attachment; filename=%s' % file_name)
-            file_path = os.path.join(self.settings.get('static_path'), file_name)
-            if not file_name or not os.path.exists(file_path):
-                raise HTTPError(404)
-            with open(file_path, 'rb') as f:
-                while True:
-                    data = f.read(self.settings.get('buf_size'))
-                    if data:
-                        self.write(data)
+            if file_name:
+                exist_stat, exist_res = self.db_client.weed_file_exist(file_name)
+                if exist_stat == 0:
+                    query_stat, query_res = self.fs_client.download_file(exist_res.get('fid'), file_name)
+                    if query_stat:
+                        self.redirect(url=query_res, permanent=False, status=None)
                     else:
-                        self.finish()
-                        return
+                        raise HTTPError(404)
+                else:
+                    raise HTTPError(404)
         except Exception as error:
             logging.error(str(error))
             raise HTTPError(404)
         finally:
             self.finish()
+
+    @tornado.gen.coroutine
+    @tornado.web.asynchronous
+    def head(self, *args, **kwargs):
+        return self.get(*args, **kwargs)
